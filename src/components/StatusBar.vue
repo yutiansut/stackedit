@@ -59,43 +59,47 @@ export default {
   created() {
     editorSvc.$on('sectionList', () => this.computeText());
     editorSvc.$on('selectionRange', () => this.computeText());
-    editorSvc.$on('previewText', () => this.computeHtml());
+    editorSvc.$on('previewCtx', () => this.computeHtml());
     editorSvc.$on('previewSelectionRange', () => this.computeHtml());
   },
 
   methods: {
     computeText() {
-      this.textSelection = false;
-      let text = editorSvc.clEditor.getContent();
-      const beforeText = text.slice(0, editorSvc.clEditor.selectionMgr.selectionEnd);
-      const beforeLines = beforeText.split('\n');
-      this.line = beforeLines.length;
-      this.column = beforeLines.pop().length;
+      setTimeout(() => {
+        this.textSelection = false;
+        let text = editorSvc.clEditor.getContent();
+        const beforeText = text.slice(0, editorSvc.clEditor.selectionMgr.selectionEnd);
+        const beforeLines = beforeText.split('\n');
+        this.line = beforeLines.length;
+        this.column = beforeLines.pop().length;
 
-      const selectedText = editorSvc.clEditor.selectionMgr.getSelectedText();
-      if (selectedText) {
-        this.textSelection = true;
-        text = selectedText;
-      }
-      this.textStats.forEach((stat) => {
-        stat.value = (text.match(stat.regex) || []).length;
-      });
-    },
-    computeHtml() {
-      let text;
-      if (editorSvc.previewSelectionRange) {
-        text = `${editorSvc.previewSelectionRange}`;
-      }
-      this.htmlSelection = true;
-      if (!text) {
-        this.htmlSelection = false;
-        text = editorSvc.previewText;
-      }
-      if (text != null) {
-        this.htmlStats.forEach((stat) => {
+        const selectedText = editorSvc.clEditor.selectionMgr.getSelectedText();
+        if (selectedText) {
+          this.textSelection = true;
+          text = selectedText;
+        }
+        this.textStats.forEach((stat) => {
           stat.value = (text.match(stat.regex) || []).length;
         });
-      }
+      }, 10);
+    },
+    computeHtml() {
+      setTimeout(() => {
+        let text;
+        if (editorSvc.previewSelectionRange) {
+          text = `${editorSvc.previewSelectionRange}`;
+        }
+        this.htmlSelection = true;
+        if (!text) {
+          this.htmlSelection = false;
+          ({ text } = editorSvc.previewCtx);
+        }
+        if (text != null) {
+          this.htmlStats.forEach((stat) => {
+            stat.value = (text.match(stat.regex) || []).length;
+          });
+        }
+      }, 10);
     },
   },
 };

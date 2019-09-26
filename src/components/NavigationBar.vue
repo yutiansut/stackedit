@@ -1,12 +1,14 @@
 <template>
-  <nav class="navigation-bar" :class="{'navigation-bar--editor': styles.showEditor && !revisionContent}">
+  <nav class="navigation-bar" :class="{'navigation-bar--editor': styles.showEditor && !revisionContent, 'navigation-bar--light': light}">
     <!-- Explorer -->
     <div class="navigation-bar__inner navigation-bar__inner--left navigation-bar__inner--button">
-      <button class="navigation-bar__button button" tour-step-anchor="explorer" @click="toggleExplorer()" v-title="'Toggle explorer'"><icon-folder></icon-folder></button>
+      <button class="navigation-bar__button navigation-bar__button--close button" v-if="light" @click="close()" v-title="'Close StackEdit'"><icon-check-circle></icon-check-circle></button>
+      <button class="navigation-bar__button navigation-bar__button--explorer-toggler button" v-else tour-step-anchor="explorer" @click="toggleExplorer()" v-title="'Toggle explorer'"><icon-folder></icon-folder></button>
     </div>
     <!-- Side bar -->
     <div class="navigation-bar__inner navigation-bar__inner--right navigation-bar__inner--button">
-      <button class="navigation-bar__button navigation-bar__button--stackedit button" tour-step-anchor="menu" @click="toggleSideBar()" v-title="'Toggle side bar'"><icon-provider provider-id="stackedit"></icon-provider></button>
+      <a class="navigation-bar__button navigation-bar__button--stackedit button" v-if="light" href="app" target="_blank" v-title="'Open StackEdit'"><icon-provider provider-id="stackedit"></icon-provider></a>
+      <button class="navigation-bar__button navigation-bar__button--stackedit button" v-else tour-step-anchor="menu" @click="toggleSideBar()" v-title="'Toggle side bar'"><icon-provider provider-id="stackedit"></icon-provider></button>
     </div>
     <div class="navigation-bar__inner navigation-bar__inner--right navigation-bar__inner--title flex flex--row">
       <!-- Spinner -->
@@ -17,13 +19,13 @@
       <!-- Title -->
       <div class="navigation-bar__title navigation-bar__title--fake text-input"></div>
       <div class="navigation-bar__title navigation-bar__title--text text-input" :style="{width: titleWidth + 'px'}">{{title}}</div>
-      <input class="navigation-bar__title navigation-bar__title--input text-input" :class="{'navigation-bar__title--focus': titleFocus, 'navigation-bar__title--scrolling': titleScrolling}" :style="{width: titleWidth + 'px'}" @focus="editTitle(true)" @blur="editTitle(false)" @keyup.enter="submitTitle()" @keyup.esc="submitTitle(true)" @mouseenter="titleHover = true" @mouseleave="titleHover = false" v-model="title">
+      <input class="navigation-bar__title navigation-bar__title--input text-input" :class="{'navigation-bar__title--focus': titleFocus, 'navigation-bar__title--scrolling': titleScrolling}" :style="{width: titleWidth + 'px'}" @focus="editTitle(true)" @blur="editTitle(false)" @keydown.enter="submitTitle(false)" @keydown.esc.stop="submitTitle(true)" @mouseenter="titleHover = true" @mouseleave="titleHover = false" v-model="title">
       <!-- Sync/Publish -->
       <div class="flex flex--row" :class="{'navigation-bar__hidden': styles.hideLocations}">
         <a class="navigation-bar__button navigation-bar__button--location button" :class="{'navigation-bar__button--blink': location.id === currentLocation.id}" v-for="location in syncLocations" :key="location.id" :href="location.url" target="_blank" v-title="'Synchronized location'"><icon-provider :provider-id="location.providerId"></icon-provider></a>
         <button class="navigation-bar__button navigation-bar__button--sync button" :disabled="!isSyncPossible || isSyncRequested || offline" @click="requestSync" v-title="'Synchronize now'"><icon-sync></icon-sync></button>
         <a class="navigation-bar__button navigation-bar__button--location button" :class="{'navigation-bar__button--blink': location.id === currentLocation.id}" v-for="location in publishLocations" :key="location.id" :href="location.url" target="_blank" v-title="'Publish location'"><icon-provider :provider-id="location.providerId"></icon-provider></a>
-        <button class="navigation-bar__button navigation-bar__button--publish button" :disabled="!publishLocations.length || isPublishRequested || offline" @click="requestPublish"v-title="'Publish now'"><icon-upload></icon-upload></button>
+        <button class="navigation-bar__button navigation-bar__button--publish button" :disabled="!publishLocations.length || isPublishRequested || offline" @click="requestPublish" v-title="'Publish now'"><icon-upload></icon-upload></button>
       </div>
       <!-- Revision -->
       <div class="flex flex--row" v-if="revisionContent">
@@ -31,22 +33,15 @@
         <button class="navigation-bar__button navigation-bar__button--revision button" @click="setRevisionContent()" v-title="'Close revision'"><icon-close></icon-close></button>
       </div>
     </div>
-    <div class="navigation-bar__inner navigation-bar__inner--edit-buttons">
+    <div class="navigation-bar__inner navigation-bar__inner--edit-pagedownButtons">
       <button class="navigation-bar__button button" @click="undo" v-title="'Undo'" :disabled="!canUndo"><icon-undo></icon-undo></button>
       <button class="navigation-bar__button button" @click="redo" v-title="'Redo'" :disabled="!canRedo"><icon-redo></icon-redo></button>
-      <div class="navigation-bar__spacer"></div>
-      <button class="navigation-bar__button button" @click="pagedownClick('bold')" v-title="'Bold'"><icon-format-bold></icon-format-bold></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('italic')" v-title="'Italic'"><icon-format-italic></icon-format-italic></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('strikethrough')" v-title="'Strikethrough'"><icon-format-strikethrough></icon-format-strikethrough></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('heading')" v-title="'Heading'"><icon-format-size></icon-format-size></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('ulist')" v-title="'Unordered list'"><icon-format-list-bulleted></icon-format-list-bulleted></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('olist')" v-title="'Ordered list'"><icon-format-list-numbers></icon-format-list-numbers></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('table')" v-title="'Table'"><icon-table></icon-table></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('quote')" v-title="'Blockquote'"><icon-format-quote-close></icon-format-quote-close></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('code')" v-title="'Code'"><icon-code-tags></icon-code-tags></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('link')" v-title="'Link'"><icon-link-variant></icon-link-variant></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('image')" v-title="'Image'"><icon-file-image></icon-file-image></button>
-      <button class="navigation-bar__button button" @click="pagedownClick('hr')" v-title="'Horizontal rule'"><icon-format-horizontal-rule></icon-format-horizontal-rule></button>
+      <div v-for="button in pagedownButtons" :key="button.method">
+        <button class="navigation-bar__button button" v-if="button.method" @click="pagedownClick(button.method)" v-title="button.titleWithShortcut">
+          <component :is="button.iconClass"></component>
+        </button>
+        <div class="navigation-bar__spacer" v-else></div>
+      </div>
     </div>
   </nav>
 </template>
@@ -57,7 +52,32 @@ import editorSvc from '../services/editorSvc';
 import syncSvc from '../services/syncSvc';
 import publishSvc from '../services/publishSvc';
 import animationSvc from '../services/animationSvc';
+import tempFileSvc from '../services/tempFileSvc';
 import utils from '../services/utils';
+import pagedownButtons from '../data/pagedownButtons';
+import store from '../store';
+import workspaceSvc from '../services/workspaceSvc';
+import badgeSvc from '../services/badgeSvc';
+
+// According to mousetrap
+const mod = /Mac|iPod|iPhone|iPad/.test(navigator.platform) ? 'Meta' : 'Ctrl';
+
+const getShortcut = (method) => {
+  let result = '';
+  Object.entries(store.getters['data/computedSettings'].shortcuts).some(([keys, shortcut]) => {
+    if (`${shortcut.method || shortcut}` === method) {
+      result = keys.split('+').map(key => key.toLowerCase()).map((key) => {
+        if (key === 'mod') {
+          return mod;
+        }
+        // Capitalize
+        return key && `${key[0].toUpperCase()}${key.slice(1)}`;
+      }).join('+');
+    }
+    return result;
+  });
+  return result && ` – ${result}`;
+};
 
 export default {
   data: () => ({
@@ -68,6 +88,7 @@ export default {
   }),
   computed: {
     ...mapState([
+      'light',
       'offline',
     ]),
     ...mapState('queue', [
@@ -91,12 +112,19 @@ export default {
     ...mapGetters('publishLocation', {
       publishLocations: 'current',
     }),
+    pagedownButtons() {
+      return pagedownButtons.map(button => ({
+        ...button,
+        titleWithShortcut: `${button.title}${getShortcut(button.method)}`,
+        iconClass: `icon-${button.icon}`,
+      }));
+    },
     isSyncPossible() {
-      return this.$store.getters['workspace/syncToken'] ||
-        this.$store.getters['syncLocation/current'].length;
+      return store.getters['workspace/syncToken'] ||
+        store.getters['syncLocation/current'].length;
     },
     showSpinner() {
-      return !this.$store.state.queue.isEmpty;
+      return !store.state.queue.isEmpty;
     },
     titleWidth() {
       if (!this.mounted) {
@@ -104,9 +132,7 @@ export default {
       }
       this.titleFakeElt.textContent = this.title;
       const width = this.titleFakeElt.getBoundingClientRect().width + 2; // 2px for the caret
-      return width < this.styles.titleMaxWidth
-        ? width
-        : this.styles.titleMaxWidth;
+      return Math.min(width, this.styles.titleMaxWidth);
     },
     titleScrolling() {
       const result = this.titleHover && !this.titleFocus;
@@ -125,6 +151,13 @@ export default {
         }
       }
       return result;
+    },
+    editCancelTrigger() {
+      const current = store.getters['file/current'];
+      return utils.serializeObject([
+        current.id,
+        current.name,
+      ]);
     },
   },
   methods: {
@@ -146,7 +179,7 @@ export default {
     },
     requestSync() {
       if (this.isSyncPossible && !this.isSyncRequested) {
-        syncSvc.requestSync();
+        syncSvc.requestSync(true);
       }
     },
     requestPublish() {
@@ -155,20 +188,31 @@ export default {
       }
     },
     pagedownClick(name) {
-      if (this.$store.getters['content/isCurrentEditable']) {
+      if (store.getters['content/isCurrentEditable']) {
+        const text = editorSvc.clEditor.getContent();
         editorSvc.pagedownEditor.uiManager.doClick(name);
+        if (text !== editorSvc.clEditor.getContent()) {
+          badgeSvc.addBadge('formatButtons');
+        }
       }
     },
-    editTitle(toggle) {
+    async editTitle(toggle) {
       this.titleFocus = toggle;
       if (toggle) {
         this.titleInputElt.setSelectionRange(0, this.titleInputElt.value.length);
       } else {
         const title = this.title.trim();
-        if (title) {
-          this.$store.dispatch('file/patchCurrent', { name: utils.sanitizeName(title) });
-        } else {
-          this.title = this.$store.getters['file/current'].name;
+        this.title = store.getters['file/current'].name;
+        if (title && this.title !== title) {
+          try {
+            await workspaceSvc.storeItem({
+              ...store.getters['file/current'],
+              name: title,
+            });
+            badgeSvc.addBadge('editCurrentFileName');
+          } catch (e) {
+            // Cancel
+          }
         }
       }
     },
@@ -178,13 +222,19 @@ export default {
       }
       this.titleInputElt.blur();
     },
+    close() {
+      tempFileSvc.close();
+    },
   },
   created() {
-    this.$store.watch(
-      () => this.$store.getters['file/current'].name,
-      (name) => {
-        this.title = name;
-      }, { immediate: true });
+    this.$watch(
+      () => this.editCancelTrigger,
+      () => {
+        this.title = '';
+        this.editTitle(false);
+      },
+      { immediate: true },
+    );
   },
   mounted() {
     this.titleFakeElt = this.$el.querySelector('.navigation-bar__title--fake');
@@ -195,7 +245,7 @@ export default {
 </script>
 
 <style lang="scss">
-@import 'common/variables.scss';
+@import '../styles/variables.scss';
 
 .navigation-bar {
   position: absolute;
@@ -213,14 +263,14 @@ export default {
   float: left;
 
   &.navigation-bar__inner--button {
-    margin-right: 15px;
+    margin-right: 12px;
   }
 }
 
 .navigation-bar__inner--right {
   float: right;
 
-  /* prevent from seeing wrapped buttons */
+  /* prevent from seeing wrapped pagedownButtons */
   margin-bottom: 20px;
 }
 
@@ -228,7 +278,7 @@ export default {
   margin: 0 4px;
 }
 
-.navigation-bar__inner--edit-buttons {
+.navigation-bar__inner--edit-pagedownButtons {
   margin-left: 15px;
 
   .navigation-bar__button,
@@ -241,20 +291,19 @@ export default {
   flex: none;
 }
 
-$button-size: 36px;
-
 .navigation-bar__button,
 .navigation-bar__spacer {
-  height: $button-size;
+  height: 36px;
   padding: 0 4px;
 
-  /* prevent from seeing wrapped buttons */
+  /* prevent from seeing wrapped pagedownButtons */
   margin-bottom: 20px;
 }
 
 .navigation-bar__button {
-  width: $button-size;
-  padding: 0 8px;
+  width: 34px;
+  padding: 0 7px;
+  transition: opacity 0.25s;
 
   .navigation-bar__inner--button & {
     padding: 0 4px;
@@ -290,7 +339,7 @@ $button-size: 36px;
 
 .navigation-bar__title {
   margin: 0 4px;
-  font-size: 22px;
+  font-size: 21px;
 
   .layout--revision & {
     position: absolute;
@@ -369,7 +418,7 @@ $button-size: 36px;
 }
 
 .navigation-bar__title--input,
-.navigation-bar__inner--edit-buttons {
+.navigation-bar__inner--edit-pagedownButtons {
   display: none;
 
   .navigation-bar--editor & {
@@ -390,11 +439,25 @@ $button-size: 36px;
   display: inline-block;
 }
 
+.navigation-bar__button--close {
+  color: lighten($link-color, 15%);
+
+  &:active,
+  &:focus,
+  &:hover {
+    color: lighten($link-color, 25%);
+  }
+}
+
 .navigation-bar__title--input {
   cursor: pointer;
 
   &.navigation-bar__title--focus {
     cursor: text;
+  }
+
+  .navigation-bar--light & {
+    display: none;
   }
 }
 

@@ -44,7 +44,7 @@
         <side-bar></side-bar>
       </div>
     </div>
-    <tour v-if="!layoutSettings.welcomeTourFinished"></tour>
+    <tour v-if="!light && !layoutSettings.welcomeTourFinished"></tour>
   </div>
 </template>
 
@@ -62,6 +62,8 @@ import StickyComment from './gutters/StickyComment';
 import CurrentDiscussion from './gutters/CurrentDiscussion';
 import FindReplace from './FindReplace';
 import editorSvc from '../services/editorSvc';
+import markdownConversionSvc from '../services/markdownConversionSvc';
+import store from '../store';
 
 export default {
   components: {
@@ -78,6 +80,9 @@ export default {
     FindReplace,
   },
   computed: {
+    ...mapState([
+      'light',
+    ]),
     ...mapState('content', [
       'revisionContent',
     ]),
@@ -92,7 +97,7 @@ export default {
       'layoutSettings',
     ]),
     showFindReplace() {
-      return !!this.$store.state.findReplace.type;
+      return !!store.state.findReplace.type;
     },
   },
   methods: {
@@ -102,6 +107,7 @@ export default {
     saveSelection: () => editorSvc.saveSelection(true),
   },
   created() {
+    markdownConversionSvc.init(); // Needs to be inited before mount
     this.updateBodySize();
     window.addEventListener('resize', this.updateBodySize);
     window.addEventListener('keyup', this.saveSelection);
@@ -116,8 +122,13 @@ export default {
     editorSvc.init(editorElt, previewElt, tocElt);
 
     // Focus on the editor every time reader mode is disabled
-    this.$watch(() => this.styles.showEditor,
-      showEditor => showEditor && editorSvc.clEditor.focus());
+    const focus = () => {
+      if (this.styles.showEditor) {
+        editorSvc.clEditor.focus();
+      }
+    };
+    setTimeout(focus, 100);
+    this.$watch(() => this.styles.showEditor, focus);
   },
   destroyed() {
     window.removeEventListener('resize', this.updateStyle);
@@ -130,7 +141,7 @@ export default {
 </script>
 
 <style lang="scss">
-@import 'common/variables.scss';
+@import '../styles/variables.scss';
 
 .layout {
   position: absolute;
@@ -166,11 +177,9 @@ export default {
   .sticky-comment,
   .current-discussion {
     background-color: mix(#000, $editor-background-light, 6.7%);
-    border-color: $editor-background-light;
 
     .app--dark & {
       background-color: mix(#fff, $editor-background-dark, 6.7%);
-      border-color: $editor-background-dark;
     }
   }
 }
@@ -193,13 +202,12 @@ $preview-background-dark: #252525;
   .sticky-comment,
   .current-discussion {
     background-color: mix(#000, $preview-background-light, 6.7%);
-    border-color: $preview-background-light;
   }
 }
 
 .layout__panel--explorer,
 .layout__panel--side-bar {
-  background-color: #dadada;
+  background-color: #ddd;
 }
 
 .layout__panel--find-replace {

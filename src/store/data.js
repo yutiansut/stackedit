@@ -1,16 +1,24 @@
 import Vue from 'vue';
 import yaml from 'js-yaml';
 import utils from '../services/utils';
-import defaultWorkspaces from '../data/defaultWorkspaces';
-import defaultSettings from '../data/defaultSettings.yml';
-import defaultLocalSettings from '../data/defaultLocalSettings';
-import defaultLayoutSettings from '../data/defaultLayoutSettings';
-import plainHtmlTemplate from '../data/plainHtmlTemplate.html';
-import styledHtmlTemplate from '../data/styledHtmlTemplate.html';
-import styledHtmlWithTocTemplate from '../data/styledHtmlWithTocTemplate.html';
-import jekyllSiteTemplate from '../data/jekyllSiteTemplate.html';
+import defaultWorkspaces from '../data/defaults/defaultWorkspaces';
+import defaultSettings from '../data/defaults/defaultSettings.yml';
+import defaultLocalSettings from '../data/defaults/defaultLocalSettings';
+import defaultLayoutSettings from '../data/defaults/defaultLayoutSettings';
+import plainHtmlTemplate from '../data/templates/plainHtmlTemplate.html';
+import styledHtmlTemplate from '../data/templates/styledHtmlTemplate.html';
+import styledHtmlWithTocTemplate from '../data/templates/styledHtmlWithTocTemplate.html';
+import jekyllSiteTemplate from '../data/templates/jekyllSiteTemplate.html';
+import constants from '../data/constants';
+import features from '../data/features';
+import badgeSvc from '../services/badgeSvc';
 
-const itemTemplate = (id, data = {}) => ({ id, type: 'data', data, hash: 0 });
+const itemTemplate = (id, data = {}) => ({
+  id,
+  type: 'data',
+  data,
+  hash: 0,
+});
 
 const empty = (id) => {
   switch (id) {
@@ -28,17 +36,24 @@ const empty = (id) => {
 };
 
 // Item IDs that will be stored in the localStorage
-const lsItemIdSet = new Set(utils.localStorageDataIds);
+const localStorageIdSet = new Set(constants.localStorageDataIds);
 
 // Getter/setter/patcher factories
-const getter = id => state => ((lsItemIdSet.has(id)
-  ? state.lsItemMap
-  : state.itemMap)[id] || {}).data || empty(id).data;
+const getter = id => (state) => {
+  const itemsById = localStorageIdSet.has(id)
+    ? state.lsItemsById
+    : state.itemsById;
+  if (itemsById[id]) {
+    return itemsById[id].data;
+  }
+  return empty(id).data;
+};
 const setter = id => ({ commit }, data) => commit('setItem', itemTemplate(id, data));
 const patcher = id => ({ state, commit }, data) => {
-  const item = Object.assign(empty(id), (lsItemIdSet.has(id)
-    ? state.lsItemMap
-    : state.itemMap)[id]);
+  const itemsById = localStorageIdSet.has(id)
+    ? state.lsItemsById
+    : state.itemsById;
+  const item = Object.assign(empty(id), itemsById[id]);
   commit('setItem', {
     ...empty(id),
     data: typeof data === 'object' ? {
@@ -49,18 +64,26 @@ const patcher = id => ({ state, commit }, data) => {
 };
 
 // For layoutSettings
-const layoutSettingsToggler = propertyName => ({ getters, dispatch }, value) => dispatch('patchLayoutSettings', {
-  [propertyName]: value === undefined ? !getters.layoutSettings[propertyName] : value,
-});
-const notEnoughSpace = (getters) => {
-  const constants = getters['layout/constants'];
-  const showGutter = getters['discussion/currentDiscussion'];
-  return document.body.clientWidth < constants.editorMinWidth +
-    constants.explorerWidth +
-    constants.sideBarWidth +
-    constants.buttonBarWidth +
-    (showGutter ? constants.gutterWidth : 0);
+const toggleLayoutSetting = (name, value, featureId, getters, dispatch) => {
+  const currentValue = getters.layoutSettings[name];
+  const patch = {
+    [name]: value === undefined ? !currentValue : !!value,
+  };
+  if (patch[name] !== currentValue) {
+    dispatch('patchLayoutSettings', patch);
+    badgeSvc.addBadge(featureId);
+  }
 };
+
+const layoutSettingsToggler = (propertyName, featureId) => ({ getters, dispatch }, value) =>
+  toggleLayoutSetting(propertyName, value, featureId, getters, dispatch);
+
+const notEnoughSpace = (layoutConstants, showGutter) =>
+  document.body.clientWidth < layoutConstants.editorMinWidth +
+    layoutConstants.explorerWidth +
+    layoutConstants.sideBarWidth +
+    layoutConstants.buttonBarWidth +
+    (showGutter ? layoutConstants.gutterWidth : 0);
 
 // For templates
 const makeAdditionalTemplate = (name, value, helpers = '\n') => ({
@@ -69,7 +92,7 @@ const makeAdditionalTemplate = (name, value, helpers = '\n') => ({
   helpers,
   isAdditional: true,
 });
-const additionalTemplates = {
+const defaultTemplates = {
   plainText: makeAdditionalTemplate('Plain text', '{{{files.0.content.text}}}'),
   plainHtml: makeAdditionalTemplate('Plain HTML', plainHtmlTemplate),
   styledHtml: makeAdditionalTemplate('Styled HTML', styledHtmlTemplate),
@@ -78,28 +101,25 @@ const additionalTemplates = {
 };
 
 // For tokens
-const tokenSetter = providerId => ({ getters, dispatch }, token) => {
-  dispatch('patchTokens', {
+const tokenAdder = providerId => ({ getters, dispatch }, token) => {
+  dispatch('patchTokensByType', {
     [providerId]: {
-      ...getters[`${providerId}Tokens`],
+      ...getters[`${providerId}TokensBySub`],
       [token.sub]: token,
     },
   });
 };
 
-// For workspaces
-const urlParser = window.document.createElement('a');
-
 export default {
   namespaced: true,
   state: {
     // Data items stored in the DB
-    itemMap: {},
+    itemsById: {},
     // Data items stored in the localStorage
-    lsItemMap: {},
+    lsItemsById: {},
   },
   mutations: {
-    setItem: (state, value) => {
+    setItem: ({ itemsById, lsItemsById }, value) => {
       // Create an empty item and override its data field
       const emptyItem = empty(value.id);
       const data = typeof value.data === 'object'
@@ -112,38 +132,21 @@ export default {
         data,
       });
 
-      // Store item in itemMap or lsItemMap if its stored in the localStorage
-      Vue.set(lsItemIdSet.has(item.id) ? state.lsItemMap : state.itemMap, item.id, item);
+      // Store item in itemsById or lsItemsById if its stored in the localStorage
+      Vue.set(localStorageIdSet.has(item.id) ? lsItemsById : itemsById, item.id, item);
     },
-    deleteItem(state, id) {
-      // Only used by localDbSvc to clean itemMap from object moved to localStorage
-      Vue.delete(state.itemMap, id);
+    deleteItem({ itemsById }, id) {
+      // Only used by localDbSvc to clean itemsById from object moved to localStorage
+      Vue.delete(itemsById, id);
     },
   },
   getters: {
-    workspaces: getter('workspaces'),
-    sanitizedWorkspaces: (state, getters, rootState, rootGetters) => {
-      const sanitizedWorkspaces = {};
-      const mainWorkspaceToken = rootGetters['workspace/mainWorkspaceToken'];
-      Object.entries(getters.workspaces).forEach(([id, workspace]) => {
-        const sanitizedWorkspace = {
-          id,
-          providerId: mainWorkspaceToken && 'googleDriveAppData',
-          sub: mainWorkspaceToken && mainWorkspaceToken.sub,
-          ...workspace,
-        };
-        // Rebuild the url with current hostname
-        urlParser.href = workspace.url || 'app';
-        const params = utils.parseQueryParams(urlParser.hash.slice(1));
-        sanitizedWorkspace.url = utils.addQueryParams('app', params, true);
-        sanitizedWorkspaces[id] = sanitizedWorkspace;
-      });
-      return sanitizedWorkspaces;
-    },
+    serverConf: getter('serverConf'),
+    workspaces: getter('workspaces'), // Not to be used, prefer workspace/workspacesById
     settings: getter('settings'),
-    computedSettings: (state, getters) => {
-      const customSettings = yaml.safeLoad(getters.settings);
-      const settings = yaml.safeLoad(defaultSettings);
+    computedSettings: (state, { settings }) => {
+      const customSettings = yaml.safeLoad(settings);
+      const parsedSettings = yaml.safeLoad(defaultSettings);
       const override = (obj, opt) => {
         const objType = Object.prototype.toString.call(obj);
         const optType = Object.prototype.toString.call(opt);
@@ -161,131 +164,148 @@ export default {
         });
         return obj;
       };
-      return override(settings, customSettings);
+      return override(parsedSettings, customSettings);
     },
     localSettings: getter('localSettings'),
     layoutSettings: getter('layoutSettings'),
-    templates: getter('templates'),
-    allTemplates: (state, getters) => ({
-      ...getters.templates,
-      ...additionalTemplates,
+    templatesById: getter('templates'),
+    allTemplatesById: (state, { templatesById }) => ({
+      ...templatesById,
+      ...defaultTemplates,
     }),
+    lastCreated: getter('lastCreated'),
     lastOpened: getter('lastOpened'),
-    lastOpenedIds: (state, getters, rootState) => {
-      const lastOpened = {
-        ...getters.lastOpened,
+    lastOpenedIds: (state, { lastOpened }, rootState) => {
+      const result = {
+        ...lastOpened,
       };
       const currentFileId = rootState.file.currentId;
-      if (currentFileId && !lastOpened[currentFileId]) {
-        lastOpened[currentFileId] = Date.now();
+      if (currentFileId && !result[currentFileId]) {
+        result[currentFileId] = Date.now();
       }
-      return Object.keys(lastOpened)
-        .filter(id => rootState.file.itemMap[id])
-        .sort((id1, id2) => lastOpened[id2] - lastOpened[id1])
+      return Object.keys(result)
+        .filter(id => rootState.file.itemsById[id])
+        .sort((id1, id2) => result[id2] - result[id1])
         .slice(0, 20);
     },
-    syncData: getter('syncData'),
-    syncDataByItemId: (state, getters) => {
+    syncDataById: getter('syncData'),
+    syncDataByItemId: (state, { syncDataById }, rootState, rootGetters) => {
       const result = {};
-      Object.entries(getters.syncData).forEach(([, value]) => {
-        result[value.itemId] = value;
-      });
+      if (rootGetters['workspace/currentWorkspaceIsGit']) {
+        Object.entries(rootGetters.gitPathsByItemId).forEach(([id, path]) => {
+          const syncDataEntry = syncDataById[path];
+          if (syncDataEntry) {
+            result[id] = syncDataEntry;
+          }
+        });
+      } else {
+        Object.entries(syncDataById).forEach(([, syncDataEntry]) => {
+          result[syncDataEntry.itemId] = syncDataEntry;
+        });
+      }
       return result;
     },
-    syncDataByType: (state, getters) => {
-      const result = {};
-      utils.types.forEach((type) => {
-        result[type] = {};
-      });
-      Object.entries(getters.syncData).forEach(([, item]) => {
-        if (result[item.type]) {
-          result[item.type][item.itemId] = item;
+    dataSyncDataById: getter('dataSyncData'),
+    tokensByType: getter('tokens'),
+    googleTokensBySub: (state, { tokensByType }) => tokensByType.google || {},
+    couchdbTokensBySub: (state, { tokensByType }) => tokensByType.couchdb || {},
+    dropboxTokensBySub: (state, { tokensByType }) => tokensByType.dropbox || {},
+    githubTokensBySub: (state, { tokensByType }) => tokensByType.github || {},
+    gitlabTokensBySub: (state, { tokensByType }) => tokensByType.gitlab || {},
+    wordpressTokensBySub: (state, { tokensByType }) => tokensByType.wordpress || {},
+    zendeskTokensBySub: (state, { tokensByType }) => tokensByType.zendesk || {},
+    badgeCreations: getter('badgeCreations'),
+    badgeTree: (state, { badgeCreations }) => features
+      .map(feature => feature.toBadge(badgeCreations)),
+    allBadges: (state, { badgeTree }) => {
+      const result = [];
+      const processBadgeNodes = nodes => nodes.forEach((node) => {
+        result.push(node);
+        if (node.children) {
+          processBadgeNodes(node.children);
         }
       });
+      processBadgeNodes(badgeTree);
       return result;
     },
-    dataSyncData: getter('dataSyncData'),
-    tokens: getter('tokens'),
-    googleTokens: (state, getters) => getters.tokens.google || {},
-    couchdbTokens: (state, getters) => getters.tokens.couchdb || {},
-    dropboxTokens: (state, getters) => getters.tokens.dropbox || {},
-    githubTokens: (state, getters) => getters.tokens.github || {},
-    wordpressTokens: (state, getters) => getters.tokens.wordpress || {},
-    zendeskTokens: (state, getters) => getters.tokens.zendesk || {},
   },
   actions: {
-    setWorkspaces: setter('workspaces'),
-    patchWorkspaces: patcher('workspaces'),
+    setServerConf: setter('serverConf'),
     setSettings: setter('settings'),
     patchLocalSettings: patcher('localSettings'),
     patchLayoutSettings: patcher('layoutSettings'),
-    toggleNavigationBar: layoutSettingsToggler('showNavigationBar'),
-    toggleEditor: layoutSettingsToggler('showEditor'),
-    toggleSidePreview: layoutSettingsToggler('showSidePreview'),
-    toggleStatusBar: layoutSettingsToggler('showStatusBar'),
-    toggleScrollSync: layoutSettingsToggler('scrollSync'),
-    toggleFocusMode: layoutSettingsToggler('focusMode'),
-    toggleSideBar: ({ commit, getters, dispatch, rootGetters }, value) => {
+    toggleNavigationBar: layoutSettingsToggler('showNavigationBar', 'toggleNavigationBar'),
+    toggleEditor: layoutSettingsToggler('showEditor', 'toggleEditor'),
+    toggleSidePreview: layoutSettingsToggler('showSidePreview', 'toggleSidePreview'),
+    toggleStatusBar: layoutSettingsToggler('showStatusBar', 'toggleStatusBar'),
+    toggleScrollSync: layoutSettingsToggler('scrollSync', 'toggleScrollSync'),
+    toggleFocusMode: layoutSettingsToggler('focusMode', 'toggleFocusMode'),
+    toggleSideBar: ({ getters, dispatch, rootGetters }, value) => {
       // Reset side bar
       dispatch('setSideBarPanel');
 
+      // Toggle it
+      toggleLayoutSetting('showSideBar', value, 'toggleSideBar', getters, dispatch);
+
       // Close explorer if not enough space
-      const patch = {
-        showSideBar: value === undefined ? !getters.layoutSettings.showSideBar : value,
-      };
-      if (patch.showSideBar && notEnoughSpace(rootGetters)) {
-        patch.showExplorer = false;
+      if (getters.layoutSettings.showSideBar &&
+        notEnoughSpace(rootGetters['layout/constants'], rootGetters['discussion/currentDiscussion'])
+      ) {
+        dispatch('patchLayoutSettings', {
+          showExplorer: false,
+        });
       }
-      dispatch('patchLayoutSettings', patch);
     },
-    toggleExplorer: ({ commit, getters, dispatch, rootGetters }, value) => {
+    toggleExplorer: ({ getters, dispatch, rootGetters }, value) => {
+      // Toggle explorer
+      toggleLayoutSetting('showExplorer', value, 'toggleExplorer', getters, dispatch);
+
       // Close side bar if not enough space
-      const patch = {
-        showExplorer: value === undefined ? !getters.layoutSettings.showExplorer : value,
-      };
-      if (patch.showExplorer && notEnoughSpace(rootGetters)) {
-        patch.showSideBar = false;
+      if (getters.layoutSettings.showExplorer &&
+        notEnoughSpace(rootGetters['layout/constants'], rootGetters['discussion/currentDiscussion'])
+      ) {
+        dispatch('patchLayoutSettings', {
+          showSideBar: false,
+        });
       }
-      dispatch('patchLayoutSettings', patch);
     },
     setSideBarPanel: ({ dispatch }, value) => dispatch('patchLayoutSettings', {
       sideBarPanel: value === undefined ? 'menu' : value,
     }),
-    setTemplates: ({ commit }, data) => {
-      const dataToCommit = {
-        ...data,
+    setTemplatesById: ({ commit }, templatesById) => {
+      const templatesToCommit = {
+        ...templatesById,
       };
       // We don't store additional templates
-      Object.keys(additionalTemplates).forEach((id) => {
-        delete dataToCommit[id];
+      Object.keys(defaultTemplates).forEach((id) => {
+        delete templatesToCommit[id];
       });
-      commit('setItem', itemTemplate('templates', dataToCommit));
+      commit('setItem', itemTemplate('templates', templatesToCommit));
     },
-    setLastOpenedId: ({ getters, commit, dispatch, rootState }, fileId) => {
+    setLastCreated: setter('lastCreated'),
+    setLastOpenedId: ({ getters, commit, rootState }, fileId) => {
       const lastOpened = { ...getters.lastOpened };
       lastOpened[fileId] = Date.now();
-      commit('setItem', itemTemplate('lastOpened', lastOpened));
-      dispatch('cleanLastOpenedId');
-    },
-    cleanLastOpenedId: ({ getters, commit, rootState }) => {
-      const lastOpened = {};
-      const oldLastOpened = getters.lastOpened;
-      Object.entries(oldLastOpened).forEach(([fileId, date]) => {
-        if (rootState.file.itemMap[fileId]) {
-          lastOpened[fileId] = date;
+      // Remove entries that don't exist anymore
+      const cleanedLastOpened = {};
+      Object.entries(lastOpened).forEach(([id, value]) => {
+        if (rootState.file.itemsById[id]) {
+          cleanedLastOpened[id] = value;
         }
       });
-      commit('setItem', itemTemplate('lastOpened', lastOpened));
+      commit('setItem', itemTemplate('lastOpened', cleanedLastOpened));
     },
-    setSyncData: setter('syncData'),
-    patchSyncData: patcher('syncData'),
-    patchDataSyncData: patcher('dataSyncData'),
-    patchTokens: patcher('tokens'),
-    setGoogleToken: tokenSetter('google'),
-    setCouchdbToken: tokenSetter('couchdb'),
-    setDropboxToken: tokenSetter('dropbox'),
-    setGithubToken: tokenSetter('github'),
-    setWordpressToken: tokenSetter('wordpress'),
-    setZendeskToken: tokenSetter('zendesk'),
+    setSyncDataById: setter('syncData'),
+    patchSyncDataById: patcher('syncData'),
+    patchDataSyncDataById: patcher('dataSyncData'),
+    patchTokensByType: patcher('tokens'),
+    addGoogleToken: tokenAdder('google'),
+    addCouchdbToken: tokenAdder('couchdb'),
+    addDropboxToken: tokenAdder('dropbox'),
+    addGithubToken: tokenAdder('github'),
+    addGitlabToken: tokenAdder('gitlab'),
+    addWordpressToken: tokenAdder('wordpress'),
+    addZendeskToken: tokenAdder('zendesk'),
+    patchBadgeCreations: patcher('badgeCreations'),
   },
 };

@@ -4,11 +4,11 @@
       <div class="modal__image">
         <icon-provider provider-id="googleDrive"></icon-provider>
       </div>
-      <p>This will create a workspace synchronized with a <b>Google Drive</b> folder.</p>
-      <form-entry label="Folder ID (optional)">
-        <input slot="field" class="textfield" type="text" v-model.trim="folderId" @keyup.enter="resolve()">
+      <p>Create a workspace synced with a <b>Google Drive</b> folder.</p>
+      <form-entry label="Folder ID" info="optional">
+        <input slot="field" class="textfield" type="text" v-model.trim="folderId" @keydown.enter="resolve()">
         <div class="form-entry__info">
-          If no folder ID is supplied, a new workspace folder will be created in your root folder.
+          If not supplied, a new workspace folder will be created in your Drive root folder.
         </div>
         <div class="form-entry__actions">
           <a href="javascript:void(0)" @click="openFolder">Choose folder</a>
@@ -17,7 +17,7 @@
     </div>
     <div class="modal__button-bar">
       <button class="button" @click="config.reject()">Cancel</button>
-      <button class="button" @click="resolve()">Ok</button>
+      <button class="button button--resolve" @click="resolve()">Ok</button>
     </div>
   </modal-inner>
 </template>
@@ -26,6 +26,7 @@
 import googleHelper from '../../../services/providers/helpers/googleHelper';
 import modalTemplate from '../common/modalTemplate';
 import utils from '../../../services/utils';
+import store from '../../../store';
 
 export default modalTemplate({
   computedLocalSettings: {
@@ -33,14 +34,17 @@ export default modalTemplate({
   },
   methods: {
     openFolder() {
-      return this.$store.dispatch(
+      return store.dispatch(
         'modal/hideUntil',
         googleHelper.openPicker(this.config.token, 'folder')
           .then((folders) => {
-            this.$store.dispatch('data/patchLocalSettings', {
-              googleDriveWorkspaceFolderId: folders[0].id,
-            });
-          }));
+            if (folders[0]) {
+              store.dispatch('data/patchLocalSettings', {
+                googleDriveWorkspaceFolderId: folders[0].id,
+              });
+            }
+          }),
+      );
     },
     resolve() {
       const url = utils.addQueryParams('app', {

@@ -28,11 +28,13 @@
 </template>
 
 <script>
-import { mapState, mapGetters, mapMutations } from 'vuex';
+import { mapState, mapGetters, mapMutations, mapActions } from 'vuex';
 import editorSvc from '../../services/editorSvc';
 import animationSvc from '../../services/animationSvc';
 import markdownConversionSvc from '../../services/markdownConversionSvc';
 import StickyComment from './StickyComment';
+import store from '../../store';
+import badgeSvc from '../../services/badgeSvc';
 
 export default {
   components: {
@@ -48,6 +50,7 @@ export default {
       'previousDiscussionId',
       'nextDiscussionId',
       'currentFileDiscussions',
+      'currentDiscussionLastCommentId',
     ]),
     ...mapGetters('layout', [
       'constants',
@@ -59,22 +62,25 @@ export default {
       return this.nextDiscussionId && this.nextDiscussionId !== this.currentDiscussionId;
     },
     showRemove() {
-      return this.currentFileDiscussions[this.currentDiscussionId];
+      return this.currentDiscussionLastCommentId;
     },
   },
   methods: {
     ...mapMutations('discussion', [
       'setCurrentDiscussionId',
     ]),
+    ...mapActions('notification', [
+      'info',
+    ]),
     goToDiscussion(discussionId = this.currentDiscussionId) {
       this.setCurrentDiscussionId(discussionId);
-      const layoutSettings = this.$store.getters['data/layoutSettings'];
+      const layoutSettings = store.getters['data/layoutSettings'];
       const discussion = this.currentFileDiscussions[discussionId];
       const coordinates = layoutSettings.showEditor
         ? editorSvc.clEditor.selectionMgr.getCoordinates(discussion.end)
         : editorSvc.getPreviewOffsetCoordinates(editorSvc.getPreviewOffset(discussion.end));
       if (!coordinates) {
-        this.$store.dispatch('notification/info', "Discussion can't be located in the file.");
+        this.info("Discussion can't be located in the file.");
       } else {
         const scrollerElt = layoutSettings.showEditor
           ? editorSvc.editorElt.parentNode
@@ -92,26 +98,28 @@ export default {
           .start();
       }
     },
-    removeDiscussion() {
-      this.$store.dispatch('modal/discussionDeletion')
-        .then(
-          () => this.$store.dispatch('discussion/cleanCurrentFile', {
-            filterDiscussion: this.currentDiscussion,
-          }),
-          () => {}); // Cancel
+    async removeDiscussion() {
+      try {
+        await store.dispatch('modal/open', 'discussionDeletion');
+        store.dispatch('discussion/cleanCurrentFile', {
+          filterDiscussion: this.currentDiscussion,
+        });
+        badgeSvc.addBadge('removeDiscussion');
+      } catch (e) {
+        // Cancel
+      }
     },
   },
 };
 </script>
 
 <style lang="scss">
-@import '../common/variables.scss';
+@import '../../styles/variables.scss';
 
 .current-discussion {
   position: absolute;
   right: 0;
   bottom: 0;
-  border-top: 2px solid;
 
   .sticky-comment {
     position: relative;

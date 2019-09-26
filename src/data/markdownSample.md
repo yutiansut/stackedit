@@ -8,12 +8,15 @@ Headers
 ### Header 3
 
 
+
 Styling
 ---------------------------
 
 *Emphasize* _emphasize_
 
 **Strong** __strong__
+
+==Marked text.==
 
 ~~Mistaken text.~~
 
@@ -24,16 +27,21 @@ H~2~O is a liquid.
 2^10^ is 1024.
 
 
+
 Lists
 ---------------------------
 
 - Item
-* Item
-+ Item
+  * Item
+    + Item
 
-1. Item
-2. Item
-3. Item
+1. Item 1
+2. Item 2
+3. Item 3
+
+- [ ] Incomplete item
+- [x] Complete item
+
 
 
 Links
@@ -42,6 +50,9 @@ Links
 A [link](http://example.com).
 
 An image: ![Alt](img.jpg)
+
+A sized image: ![Alt](img.jpg =60x50)
+
 
 
 Code
@@ -60,6 +71,7 @@ var foo = 'bar';
 ```
 
 
+
 Tables
 ---------------------------
 
@@ -75,15 +87,18 @@ Pipe     | $1
 | centered | right-aligned |
 
 
+
 Definition lists
 ---------------------------
 
 Markdown
 :  Text-to-HTML conversion tool
 
-Classeur
-:  French translation for "Binder"
-:  A Markdown editing app
+Authors
+:  John
+:  Luke
+
+
 
 Footnotes
 ---------------------------
@@ -93,12 +108,14 @@ Some text with a footnote.[^1]
 [^1]: The footnote.
 
 
+
 Abbreviations
 ---------------------------
 
 Markdown converts text to HTML.
 
 *[HTML]: HyperText Markup Language
+
 
 
 LaTeX math

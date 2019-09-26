@@ -33,14 +33,13 @@ export default {
 </script>
 
 <style lang="scss">
-@import '../common/variables.scss';
+@import '../../styles/variables.scss';
 
 .sticky-comment {
   position: absolute;
   right: 0;
   font-size: 15px;
   padding-top: 10px;
-  border-bottom: 2px solid;
 
   .current-discussion & {
     width: auto !important;

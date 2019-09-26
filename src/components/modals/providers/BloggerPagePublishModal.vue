@@ -4,19 +4,19 @@
       <div class="modal__image">
         <icon-provider provider-id="bloggerPage"></icon-provider>
       </div>
-      <p>This will publish <b>{{currentFileName}}</b> to your <b>Blogger Page</b>.</p>
+      <p>Publish <b>{{currentFileName}}</b> to your <b>Blogger Page</b>.</p>
       <form-entry label="Blog URL" error="blogUrl">
-        <input slot="field" class="textfield" type="text" v-model.trim="blogUrl" @keyup.enter="resolve()">
+        <input slot="field" class="textfield" type="text" v-model.trim="blogUrl" @keydown.enter="resolve()">
         <div class="form-entry__info">
           <b>Example:</b> http://example.blogger.com/
         </div>
       </form-entry>
-      <form-entry label="Existing page ID (optional)">
-        <input slot="field" class="textfield" type="text" v-model.trim="pageId" @keyup.enter="resolve()">
+      <form-entry label="Existing page ID" info="optional">
+        <input slot="field" class="textfield" type="text" v-model.trim="pageId" @keydown.enter="resolve()">
       </form-entry>
       <form-entry label="Template">
-        <select slot="field" class="textfield" v-model="selectedTemplate" @keyup.enter="resolve()">
-          <option v-for="(template, id) in allTemplates" :key="id" :value="id">
+        <select slot="field" class="textfield" v-model="selectedTemplate" @keydown.enter="resolve()">
+          <option v-for="(template, id) in allTemplatesById" :key="id" :value="id">
             {{ template.name }}
           </option>
         </select>
@@ -30,7 +30,7 @@
     </div>
     <div class="modal__button-bar">
       <button class="button" @click="config.reject()">Cancel</button>
-      <button class="button" @click="resolve()">Ok</button>
+      <button class="button button--resolve" @click="resolve()">Ok</button>
     </div>
   </modal-inner>
 </template>
@@ -54,7 +54,10 @@ export default modalTemplate({
       } else {
         // Return new location
         const location = bloggerPageProvider.makeLocation(
-          this.config.token, this.blogUrl, this.pageId);
+          this.config.token,
+          this.blogUrl,
+          this.pageId,
+        );
         location.templateId = this.selectedTemplate;
         this.config.resolve(location);
       }

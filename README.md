@@ -4,31 +4,16 @@
 
 > Full-featured, open-source Markdown editor based on PageDown, the Markdown library used by Stack Overflow and the other Stack Exchange sites.
 
-https://stackedit.io/.
+https://stackedit.io/
 
-### StackEdit can:
+### Ecosystem
 
- - Manage multiple Markdown files online or offline
- - Export your files in Markdown, HTML, PDF, Word, EPUB...
- - Synchronize your Markdown files in the Cloud
- - Edit existing Markdown files from Google Drive, Dropbox and your local hard drive
- - Post your Markdown file on Blogger/Blogspot, WordPress, Zendesk
- - Publish your Markdown file on GitHub, Gist, Google Drive, Dropbox
- - Share a workspace over Google Drive, CouchDB
+- [Chrome app](https://chrome.google.com/webstore/detail/iiooodelglhkcpgbajoejffhijaclcdg)
+- NEW! Embed StackEdit in any website with [stackedit.js](https://github.com/benweet/stackedit.js)
+- NEW! [Chrome extension](https://chrome.google.com/webstore/detail/ajehldoplanpchfokmeempkekhnhmoha) that uses stackedit.js
+- [Community](https://community.stackedit.io/)
 
-### Features:
-
- - Real-time HTML preview with Scroll Sync feature to bind editor and preview scrollbars
- - Markdown Extra/GitHub Flavored Markdown support and Prism.js syntax highlighting
- - LaTeX mathematical expressions using KaTeX
- - Diagrams and flowcharts using Mermaid
- - WYSIWYG control buttons
- - Smart layout
- - Offline editing
- - Online synchronization using Google Drive, Dropbox and GitHub
- - One click publish to Blogger, Dropbox, Gist, GitHub, Google Drive, WordPress, Zendesk
-
-### Build Setup
+### Build
 
 ``` bash
 # install dependencies
@@ -44,4 +29,53 @@ npm run build
 npm run build --report
 ```
 
-> **NOTE:** This page has been written and published with [StackEdit](https://stackedit.io/ "StackEdit").
+### Deploy with Helm
+
+StackEdit Helm chart allows easy StackEdit deployment to any Kubernetes cluster.
+You can use it to configure deployment with your existing ingress controller and cert-manager.
+
+```bash
+# Add the StackEdit Helm repository
+helm repo add stackedit https://benweet.github.io/stackedit-charts/
+
+# Update your local Helm chart repository cache
+helm repo update
+
+# Deploy StackEdit chart to your cluster
+helm install --name stackedit stackedit/stackedit \
+  --set dropboxAppKey=$DROPBOX_API_KEY \
+  --set dropboxAppKeyFull=$DROPBOX_FULL_ACCESS_API_KEY \
+  --set googleClientId=$GOOGLE_CLIENT_ID \
+  --set googleApiKey=$GOOGLE_API_KEY \
+  --set githubClientId=$GITHUB_CLIENT_ID \
+  --set githubClientSecret=$GITHUB_CLIENT_SECRET \
+  --set wordpressClientId=\"$WORDPRESS_CLIENT_ID\" \
+  --set wordpressSecret=$WORDPRESS_CLIENT_SECRET
+  
+# Upgrade to the latest version
+helm repo update
+helm upgrade stackedit stackedit/stackedit
+
+# Uninstall StackEdit
+helm delete --purge stackedit
+
+# Deploy using your existing ingress controller and cert-manager
+# See https://docs.cert-manager.io/en/latest/tutorials/acme/quick-start/index.html
+helm install --name stackedit stackedit/stackedit \
+  --set dropboxAppKey=$DROPBOX_API_KEY \
+  --set dropboxAppKeyFull=$DROPBOX_FULL_ACCESS_API_KEY \
+  --set googleClientId=$GOOGLE_CLIENT_ID \
+  --set googleApiKey=$GOOGLE_API_KEY \
+  --set githubClientId=$GITHUB_CLIENT_ID \
+  --set githubClientSecret=$GITHUB_CLIENT_SECRET \
+  --set wordpressClientId=\"$WORDPRESS_CLIENT_ID\" \
+  --set wordpressSecret=$WORDPRESS_CLIENT_SECRET \
+  --set ingress.enabled=true \
+  --set ingress.annotations."kubernetes\.io/ingress\.class"=nginx \
+  --set ingress.annotations."certmanager\.k8s\.io/issuer"=letsencrypt-prod \
+  --set ingress.annotations."certmanager\.k8s\.io/acme-challenge-type"=http01 \
+  --set ingress.hosts[0].host=stackedit.example.com \
+  --set ingress.hosts[0].paths[0]=/ \
+  --set ingress.tls[0].secretName=stackedit-tls \
+  --set ingress.tls[0].hosts[0]=stackedit.example.com
+```

@@ -6,6 +6,7 @@ const user = require('./user');
 const github = require('./github');
 const pdf = require('./pdf');
 const pandoc = require('./pandoc');
+const conf = require('./conf');
 
 const resolvePath = pathToResolve => path.join(__dirname, '..', pathToResolve);
 
@@ -13,7 +14,7 @@ module.exports = (app, serveV4) => {
   if (process.env.NODE_ENV === 'production') {
     // Enable CORS for fonts
     app.all('*', (req, res, next) => {
-      if (/\.(eot|ttf|woff|svg)$/.test(req.url)) {
+      if (/\.(eot|ttf|woff2?|svg)$/.test(req.url)) {
         res.header('Access-Control-Allow-Origin', '*');
       }
       next();
@@ -24,6 +25,7 @@ module.exports = (app, serveV4) => {
   }
 
   app.get('/oauth2/githubToken', github.githubToken);
+  app.get('/conf', (req, res) => res.send(conf.publicValues));
   app.get('/userInfo', user.userInfo);
   app.post('/pdfExport', pdf.generate);
   app.post('/pandocExport', pandoc.generate);

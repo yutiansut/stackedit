@@ -1,11 +1,23 @@
-const minPadding = 20;
+import pagedownButtons from '../data/pagedownButtons';
+
+let buttonCount = 2; // 2 for undo/redo
+let spacerCount = 0;
+pagedownButtons.forEach((button) => {
+  if (button.method) {
+    buttonCount += 1;
+  } else {
+    spacerCount += 1;
+  }
+});
+
+const minPadding = 25;
 const editorTopPadding = 10;
-const navigationBarEditButtonsWidth = (36 * 14) + 8; // 14 buttons + 1 spacer
-const navigationBarLeftButtonWidth = 38 + 4 + 15;
+const navigationBarEditButtonsWidth = (34 * buttonCount) + (8 * spacerCount); // buttons + spacers
+const navigationBarLeftButtonWidth = 38 + 4 + 12;
 const navigationBarRightButtonWidth = 38 + 8;
 const navigationBarSpinnerWidth = 24 + 8 + 5; // 5 for left margin
 const navigationBarLocationWidth = 20;
-const navigationBarSyncPublishButtonsWidth = 36 + 10;
+const navigationBarSyncPublishButtonsWidth = 34 + 10;
 const navigationBarTitleMargin = 8;
 const maxTitleMaxWidth = 800;
 const minTitleMaxWidth = 200;
@@ -21,14 +33,18 @@ const constants = {
 };
 
 function computeStyles(state, getters, layoutSettings = getters['data/layoutSettings'], styles = {
-  showNavigationBar: !layoutSettings.showEditor || layoutSettings.showNavigationBar,
+  showNavigationBar: layoutSettings.showNavigationBar
+    || !layoutSettings.showEditor
+    || state.content.revisionContent
+    || state.light,
   showStatusBar: layoutSettings.showStatusBar,
   showEditor: layoutSettings.showEditor,
   showSidePreview: layoutSettings.showSidePreview && layoutSettings.showEditor,
   showPreview: layoutSettings.showSidePreview || !layoutSettings.showEditor,
-  showSideBar: layoutSettings.showSideBar,
-  showExplorer: layoutSettings.showExplorer,
+  showSideBar: layoutSettings.showSideBar && !state.light,
+  showExplorer: layoutSettings.showExplorer && !state.light,
   layoutOverflow: false,
+  hideLocations: state.light,
 }) {
   styles.innerHeight = state.layout.bodyHeight;
   if (styles.showNavigationBar) {
@@ -52,7 +68,8 @@ function computeStyles(state, getters, layoutSettings = getters['data/layoutSett
   }
 
   let doublePanelWidth = styles.innerWidth - constants.buttonBarWidth;
-  const showGutter = !!getters['discussion/currentDiscussion'];
+  // No commenting for temp files
+  const showGutter = !getters['file/isCurrentTemp'] && !!getters['discussion/currentDiscussion'];
   if (showGutter) {
     doublePanelWidth -= constants.gutterWidth;
   }
@@ -91,8 +108,8 @@ function computeStyles(state, getters, layoutSettings = getters['data/layoutSett
   styles.previewWidth = styles.showSidePreview ?
     panelWidth :
     doublePanelWidth;
-  const previewRightPadding = Math.max(
-    Math.floor((styles.previewWidth - styles.textWidth) / 2), minPadding);
+  const previewRightPadding = Math
+    .max(Math.floor((styles.previewWidth - styles.textWidth) / 2), minPadding);
   if (!styles.showSidePreview) {
     styles.previewWidth += constants.buttonBarWidth;
   }
@@ -105,8 +122,8 @@ function computeStyles(state, getters, layoutSettings = getters['data/layoutSett
   styles.editorWidth = styles.showSidePreview ?
     panelWidth :
     doublePanelWidth;
-  const editorRightPadding = Math.max(
-    Math.floor((styles.editorWidth - styles.textWidth) / 2), minPadding);
+  const editorRightPadding = Math
+    .max(Math.floor((styles.editorWidth - styles.textWidth) / 2), minPadding);
   styles.editorGutterWidth = showGutter && layoutSettings.showEditor
     ? constants.gutterWidth
     : 0;
@@ -129,8 +146,9 @@ function computeStyles(state, getters, layoutSettings = getters['data/layoutSett
       styles.hideLocations = true;
     }
   }
-  styles.titleMaxWidth = Math.max(minTitleMaxWidth,
-    Math.min(maxTitleMaxWidth, styles.titleMaxWidth));
+  styles.titleMaxWidth = Math
+    .max(minTitleMaxWidth, Math
+      .min(maxTitleMaxWidth, styles.titleMaxWidth));
   return styles;
 }
 

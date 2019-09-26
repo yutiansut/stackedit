@@ -3,6 +3,7 @@ import Prism from 'prismjs';
 import MarkdownIt from 'markdown-it';
 import markdownGrammarSvc from './markdownGrammarSvc';
 import extensionSvc from './extensionSvc';
+import utils from './utils';
 
 const htmlSectionMarker = '\uF111\uF222\uF333\uF444';
 const diffMatchPatch = new DiffMatchPatch();
@@ -103,25 +104,23 @@ function hashArray(arr, valueHash, valueArray) {
   return String.fromCharCode.apply(null, hash);
 }
 
-// Default options for the markdown converter and the grammar
-const defaultOptions = {
-  abbr: true,
-  breaks: true,
-  deflist: true,
-  del: true,
-  fence: true,
-  footnote: true,
-  linkify: true,
-  math: true,
-  sub: true,
-  sup: true,
-  table: true,
-  typographer: true,
-  insideFences,
-};
+export default {
+  defaultOptions: null,
+  defaultConverter: null,
+  defaultPrismGrammars: null,
 
-const markdownConversionSvc = {
-  defaultOptions,
+  init() {
+    const defaultProperties = { extensions: utils.computedPresets.default };
+
+    // Default options for the markdown converter and the grammar
+    this.defaultOptions = {
+      ...extensionSvc.getOptions(defaultProperties),
+      insideFences,
+    };
+
+    this.defaultConverter = this.createConverter(this.defaultOptions);
+    this.defaultPrismGrammars = markdownGrammarSvc.makeGrammars(this.defaultOptions);
+  },
 
   /**
    * Creates a converter and init it with extensions.
@@ -165,6 +164,7 @@ const markdownConversionSvc = {
       lines.pop();
     }
     const parsingCtx = {
+      text,
       sections: [],
       converter,
       markdownState,
@@ -224,7 +224,7 @@ const markdownConversionSvc = {
       parsingCtx.markdownCoreRules.slice(2).forEach(rule => rule(parsingCtx.markdownState));
       parsingCtx.markdownState.isConverted = true;
     }
-    const tokens = parsingCtx.markdownState.tokens;
+    const { tokens } = parsingCtx.markdownState;
     const html = parsingCtx.converter.renderer.render(
       tokens,
       parsingCtx.converter.options,
@@ -240,7 +240,10 @@ const markdownConversionSvc = {
     let htmlSectionDiff;
     if (previousConversionCtx) {
       const oldSectionHash = hashArray(
-        previousConversionCtx.htmlSectionList, valueHash, valueArray);
+        previousConversionCtx.htmlSectionList,
+        valueHash,
+        valueArray,
+      );
       htmlSectionDiff = diffMatchPatch.diff_main(oldSectionHash, newSectionHash, false);
     } else {
       htmlSectionDiff = [
@@ -248,6 +251,7 @@ const markdownConversionSvc = {
       ];
     }
     return {
+      text: parsingCtx.text,
       sectionList: parsingCtx.sectionList,
       htmlSectionList,
       htmlSectionDiff,
@@ -263,13 +267,7 @@ const markdownConversionSvc = {
    */
   highlight(markdown, converter = this.defaultConverter, grammars = this.defaultPrismGrammars) {
     const parsingCtx = this.parseSections(converter, markdown);
-    return parsingCtx.sections.map(
-      section => Prism.highlight(section.text, grammars[section.data]),
-    ).join('');
+    return parsingCtx.sections
+      .map(section => Prism.highlight(section.text, grammars[section.data])).join('');
   },
 };
-
-markdownConversionSvc.defaultConverter = markdownConversionSvc.createConverter(defaultOptions);
-markdownConversionSvc.defaultPrismGrammars = markdownGrammarSvc.makeGrammars(defaultOptions);
-
-export default markdownConversionSvc;

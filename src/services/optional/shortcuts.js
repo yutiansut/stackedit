@@ -23,12 +23,14 @@ const findReplaceOpener = type => () => {
 const methods = {
   bold: pagedownHandler('bold'),
   italic: pagedownHandler('italic'),
+  strikethrough: pagedownHandler('strikethrough'),
   link: pagedownHandler('link'),
   quote: pagedownHandler('quote'),
   code: pagedownHandler('code'),
   image: pagedownHandler('image'),
   olist: pagedownHandler('olist'),
   ulist: pagedownHandler('ulist'),
+  clist: pagedownHandler('clist'),
   heading: pagedownHandler('heading'),
   hr: pagedownHandler('hr'),
   sync() {
@@ -44,7 +46,7 @@ const methods = {
     const replacement = `${param2 || ''}`;
     if (text && replacement) {
       setTimeout(() => {
-        const selectionMgr = editorSvc.clEditor.selectionMgr;
+        const { selectionMgr } = editorSvc.clEditor;
         let offset = selectionMgr.selectionStart;
         if (offset === selectionMgr.selectionEnd) {
           const range = selectionMgr.createRange(offset - text.length, offset);
@@ -66,8 +68,7 @@ store.watch(
   (computedSettings) => {
     Mousetrap.reset();
 
-    const shortcuts = computedSettings.shortcuts;
-    Object.entries(shortcuts).forEach(([key, shortcut]) => {
+    Object.entries(computedSettings.shortcuts).forEach(([key, shortcut]) => {
       if (shortcut) {
         const method = `${shortcut.method || shortcut}`;
         let params = shortcut.params || [];
@@ -85,4 +86,5 @@ store.watch(
     });
   }, {
     immediate: true,
-  });
+  },
+);

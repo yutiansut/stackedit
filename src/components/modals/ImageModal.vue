@@ -3,7 +3,7 @@
     <div class="modal__content">
       <p>Please provide a <b>URL</b> for your image.</p>
       <form-entry label="URL" error="url">
-        <input slot="field" class="textfield" type="text" v-model.trim="url" @keyup.enter="resolve()">
+        <input slot="field" class="textfield" type="text" v-model.trim="url" @keydown.enter="resolve">
       </form-entry>
       <menu-entry @click.native="openGooglePhotos(token)" v-for="token in googlePhotosTokens" :key="token.sub">
         <icon-provider slot="icon" provider-id="googlePhotos"></icon-provider>
@@ -17,7 +17,7 @@
     </div>
     <div class="modal__button-bar">
       <button class="button" @click="reject()">Cancel</button>
-      <button class="button" @click="resolve()">Ok</button>
+      <button class="button button--resolve" @click="resolve">Ok</button>
     </div>
   </modal-inner>
 </template>
@@ -26,6 +26,7 @@
 import modalTemplate from './common/modalTemplate';
 import MenuEntry from '../menus/common/MenuEntry';
 import googleHelper from '../../services/providers/helpers/googleHelper';
+import store from '../../store';
 
 export default modalTemplate({
   components: {
@@ -36,40 +37,44 @@ export default modalTemplate({
   }),
   computed: {
     googlePhotosTokens() {
-      const googleTokens = this.$store.getters['data/googleTokens'];
-      return Object.entries(googleTokens)
-        .map(([, token]) => token)
+      const googleTokensBySub = store.getters['data/googleTokensBySub'];
+      return Object.values(googleTokensBySub)
         .filter(token => token.isPhotos)
         .sort((token1, token2) => token1.name.localeCompare(token2.name));
     },
   },
   methods: {
-    resolve() {
+    resolve(evt) {
+      evt.preventDefault(); // Fixes https://github.com/benweet/stackedit/issues/1503
       if (!this.url) {
         this.setError('url');
       } else {
-        const callback = this.config.callback;
+        const { callback } = this.config;
         this.config.resolve();
         callback(this.url);
       }
     },
     reject() {
-      const callback = this.config.callback;
+      const { callback } = this.config;
       this.config.reject();
       callback(null);
     },
-    addGooglePhotosAccount() {
-      return googleHelper.addPhotosAccount();
+    async addGooglePhotosAccount() {
+      try {
+        await googleHelper.addPhotosAccount();
+      } catch (e) { /* cancel */ }
     },
-    openGooglePhotos(token) {
-      const callback = this.config.callback;
+    async openGooglePhotos(token) {
+      const { callback } = this.config;
       this.config.reject();
-      googleHelper.openPicker(token, 'img')
-        .then(res => res[0] && this.$store.dispatch('modal/open', {
+      const res = await googleHelper.openPicker(token, 'img');
+      if (res[0]) {
+        store.dispatch('modal/open', {
           type: 'googlePhoto',
           url: res[0].url,
           callback,
-        }));
+        });
+      }
     },
   },
 });

@@ -13,6 +13,7 @@ import { mapState, mapGetters, mapMutations } from 'vuex';
 import Comment from './Comment';
 import NewComment from './NewComment';
 import editorSvc from '../../services/editorSvc';
+import store from '../../store';
 import utils from '../../services/utils';
 
 export default {
@@ -63,7 +64,7 @@ export default {
       'setCurrentDiscussionId',
     ]),
     updateTops() {
-      const layoutSettings = this.$store.getters['data/layoutSettings'];
+      const layoutSettings = store.getters['data/layoutSettings'];
       const minTop = -2;
       let minCommentTop = minTop;
       const getTop = (discussion, commentElt1, commentElt2, isCurrent) => {
@@ -107,10 +108,13 @@ export default {
               this.currentDiscussionLastCommentId
                 && this.$el.querySelector(`.comment--${this.currentDiscussionLastCommentId}`),
               this.$el.querySelector('.comment--new'),
-              true);
+              true,
+            );
           } else {
-            tops[discussionId] = getTop(discussion,
-              this.$el.querySelector(`.comment--discussion-${discussionId}`));
+            tops[discussionId] = getTop(
+              discussion,
+              this.$el.querySelector(`.comment--discussion-${discussionId}`),
+            );
           }
         });
       this.tops = tops;
@@ -120,19 +124,15 @@ export default {
     this.$watch(
       () => this.updateTopsTrigger,
       () => this.updateTops(),
-      { immediate: true });
+      { immediate: true },
+    );
 
-    const layoutSettings = this.$store.getters['data/layoutSettings'];
+    const layoutSettings = store.getters['data/layoutSettings'];
     this.scrollerElt = layoutSettings.showEditor
       ? editorSvc.editorElt.parentNode
       : editorSvc.previewElt.parentNode;
 
     this.updateSticky = () => {
-      const commitIfDifferent = (value) => {
-        if (this.$store.state.discussion.stickyComment !== value) {
-          this.$store.commit('discussion/setStickyComment', value);
-        }
-      };
       let height = 0;
       let offsetTop = this.tops.current;
       const lastCommentElt = this.$el.querySelector(`.comment--${this.currentDiscussionLastCommentId}`);
@@ -147,13 +147,15 @@ export default {
       const currentDiscussionElt = document.querySelector('.current-discussion__inner');
       const minOffsetTop = this.scrollerElt.scrollTop + 10;
       const maxOffsetTop = (this.scrollerElt.scrollTop + this.scrollerElt.clientHeight) - height
-        - currentDiscussionElt.clientHeight - 10;
+        - currentDiscussionElt.clientHeight;
+      let stickyComment = null;
       if (offsetTop > maxOffsetTop || maxOffsetTop < minOffsetTop) {
-        commitIfDifferent('bottom');
+        stickyComment = 'bottom';
       } else if (offsetTop < minOffsetTop) {
-        commitIfDifferent('top');
-      } else {
-        commitIfDifferent(null);
+        stickyComment = 'top';
+      }
+      if (store.state.discussion.stickyComment !== stickyComment) {
+        store.commit('discussion/setStickyComment', stickyComment);
       }
     };
 
@@ -161,11 +163,12 @@ export default {
     this.$watch(
       () => this.updateStickyTrigger,
       () => this.updateSticky(),
-      { immediate: true });
+      { immediate: true },
+    );
 
-    // Move preview discussions once sectionDescWithDiffsList have been calculated
-    if (!editorSvc.sectionDescWithDiffsList) {
-      editorSvc.$once('sectionDescWithDiffsList', () => {
+    // Move preview discussions once previewCtxWithDiffs has been calculated
+    if (!editorSvc.previewCtxWithDiffs) {
+      editorSvc.$once('previewCtxWithDiffs', () => {
         this.updateTops();
         this.updateSticky();
       });
@@ -178,7 +181,7 @@ export default {
 </script>
 
 <style lang="scss">
-@import '../common/variables.scss';
+@import '../../styles/variables.scss';
 
 .comment-list {
   position: absolute;
@@ -191,19 +194,6 @@ export default {
   position: absolute;
   width: 100%;
   padding-top: 10px;
-}
-
-.comment-list__current-discussion {
-  border-top: 2px solid;
-  border-bottom: 2px solid;
-
-  .comment-list--top & {
-    border-bottom-color: transparent;
-  }
-
-  .comment-list--bottom & {
-    border-top-color: transparent;
-  }
 }
 
 /* use div selector to avoid collision with Prism */

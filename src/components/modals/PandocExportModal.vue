@@ -3,7 +3,7 @@
     <div class="modal__content">
       <p>Please choose a format for your <b>Pandoc export</b>.</p>
       <form-entry label="Template">
-        <select class="textfield" slot="field" v-model="selectedFormat" @keyup.enter="resolve()">
+        <select class="textfield" slot="field" v-model="selectedFormat" @keydown.enter="resolve()">
           <option value="asciidoc">AsciiDoc</option>
           <option value="context">ConTeXt</option>
           <option value="epub">EPUB</option>
@@ -20,62 +20,59 @@
     </div>
     <div class="modal__button-bar">
       <button class="button" @click="config.reject()">Cancel</button>
-      <button class="button" @click="resolve()">Ok</button>
+      <button class="button button--resolve" @click="resolve()">Ok</button>
     </div>
   </modal-inner>
 </template>
 
 <script>
 import FileSaver from 'file-saver';
-import sponsorSvc from '../../services/sponsorSvc';
 import networkSvc from '../../services/networkSvc';
 import editorSvc from '../../services/editorSvc';
 import googleHelper from '../../services/providers/helpers/googleHelper';
 import modalTemplate from './common/modalTemplate';
+import store from '../../store';
+import badgeSvc from '../../services/badgeSvc';
 
 export default modalTemplate({
   computedLocalSettings: {
     selectedFormat: 'pandocExportFormat',
   },
   methods: {
-    resolve() {
+    async resolve() {
       this.config.resolve();
-      const currentFile = this.$store.getters['file/current'];
-      const currentContent = this.$store.getters['content/current'];
-      const selectedFormat = this.selectedFormat;
-      this.$store.dispatch('queue/enqueue', () => Promise.all([
-        Promise.resolve().then(() => {
-          const sponsorToken = this.$store.getters['workspace/sponsorToken'];
-          return sponsorToken && googleHelper.refreshToken(sponsorToken);
-        }),
-        sponsorSvc.getToken(),
-      ])
-        .then(([sponsorToken, token]) => networkSvc.request({
-          method: 'POST',
-          url: 'pandocExport',
-          params: {
-            token,
-            idToken: sponsorToken && sponsorToken.idToken,
-            format: selectedFormat,
-            options: JSON.stringify(this.$store.getters['data/computedSettings'].pandoc),
-            metadata: JSON.stringify(currentContent.properties),
-          },
-          body: JSON.stringify(editorSvc.getPandocAst()),
-          blob: true,
-          timeout: 60000,
-        })
-        .then((res) => {
-          FileSaver.saveAs(res.body, `${currentFile.name}.${selectedFormat}`);
-        }, (err) => {
-          if (err.status !== 401) {
-            throw err;
+      const currentFile = store.getters['file/current'];
+      const currentContent = store.getters['content/current'];
+      const { selectedFormat } = this;
+      store.dispatch('queue/enqueue', async () => {
+        const tokenToRefresh = store.getters['workspace/sponsorToken'];
+        const sponsorToken = tokenToRefresh && await googleHelper.refreshToken(tokenToRefresh);
+
+        try {
+          const { body } = await networkSvc.request({
+            method: 'POST',
+            url: 'pandocExport',
+            params: {
+              idToken: sponsorToken && sponsorToken.idToken,
+              format: selectedFormat,
+              options: JSON.stringify(store.getters['data/computedSettings'].pandoc),
+              metadata: JSON.stringify(currentContent.properties),
+            },
+            body: JSON.stringify(editorSvc.getPandocAst()),
+            blob: true,
+            timeout: 60000,
+          });
+          FileSaver.saveAs(body, `${currentFile.name}.${selectedFormat}`);
+          badgeSvc.addBadge('exportPandoc');
+        } catch (err) {
+          if (err.status === 401) {
+            store.dispatch('modal/open', 'sponsorOnly');
+          } else {
+            console.error(err); // eslint-disable-line no-console
+            store.dispatch('notification/error', err);
           }
-          this.$store.dispatch('modal/sponsorOnly');
-        }))
-        .catch((err) => {
-          console.error(err); // eslint-disable-line no-console
-          this.$store.dispatch('notification/error', err);
-        }));
+        }
+      });
     },
   },
 });
